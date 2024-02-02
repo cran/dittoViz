@@ -52,7 +52,12 @@
 #' In order to leave the unedited data available for use in other features, the adjusted data are put in a new column and that new column is used for plotting.
 #' @param do.hover Logical which controls whether the ggplot output will be converted to a plotly object so that data about individual points can be displayed when you hover your cursor over them.
 #' The \code{hover.data} argument is used to determine what data to show upon hover.
-#' @param hover.data String vector of column names of \code{data_frame} which denotes what data to show for each data point, upon hover, when \code{do.hover} is set to \code{TRUE}.
+#' @param hover.data String vector which denotes what data to show for each data point, upon hover, when \code{do.hover} is set to \code{TRUE}.
+#' Defaults to all data expected to be useful.
+#' Only values present in the plotting data are actually used.
+#' These can be column names of \code{data_frame} and any column names which will be created to accommodate multivar and data adjustment functionality.
+#' You can run the function with \code{data.out = TRUE} and inspect the \code{$Target_data} output's columns to view your available options.
+#' @param hover.round.digits Integer number specifying the number of decimal digits to round displayed numeric values to, when \code{do.hover} is set to \code{TRUE}.
 #' @param shape.panel Vector of integers, corresponding to ggplot shapes, which sets what shapes to use in conjunction with \code{shape.by}.
 #' When nothing is supplied to \code{shape.by}, only the first value is used.
 #' Default is a set of 6, \code{c(16,15,17,23,25,8)}, the first being a simple, solid, circle.
@@ -97,6 +102,14 @@
 #' @param trajectory.group.by String denoting the name of a column of \code{data_frame} to use for generating trajectories from data point groups.
 #' @param trajectory.arrow.size Number representing the size of trajectory arrows, in inches.  Default = 0.15.
 #' @param add.trajectory.curves List of matrices, each representing coordinates for a trajectory path, from start to end, where matrix columns represent x and y coordinates of the paths.
+#' @param add.xline numeric value(s) where one or multiple vertical line(s) should be added.
+#' @param xline.linetype String which sets the type of line for \code{add.xline}.
+#' Defaults to "dashed", but any ggplot linetype will work.
+#' @param xline.color String that sets the color(s) of the \code{add.xline} line(s).
+#' @param add.yline numeric value(s) where one or multiple vertical line(s) should be added.
+#' @param yline.linetype String which sets the type of line for \code{add.yline}.
+#' Defaults to "dashed", but any ggplot linetype will work.
+#' @param yline.color String that sets the color(s) of the \code{add.yline} line(s).
 #' @param theme A ggplot theme which will be applied before internal adjustments.
 #' Default = \code{theme_bw()}.
 #' See \url{https://ggplot2.tidyverse.org/reference/ggtheme.html} for other options and ideas.
@@ -283,7 +296,13 @@ scatterPlot <- function(
     sub = NULL,
     theme = theme_bw(),
     do.hover = FALSE,
-    hover.data = unique(c(color.by, paste0(color.by,"-adj"), shape.by, x.by, y.by)),
+    hover.data = unique(c(
+        color.by, paste0(color.by,".color.adj"), "color.multi", "color.which",
+        x.by, paste0(x.by,".x.adj"),
+        y.by, paste0(y.by,".y.adj"),
+        shape.by, split.by
+    )),
+    hover.round.digits = 5,
     do.contour = FALSE,
     contour.color = "black",
     contour.linetype = 1,
@@ -291,6 +310,12 @@ scatterPlot <- function(
     add.trajectory.curves = NULL,
     trajectory.group.by,
     trajectory.arrow.size = 0.15,
+    add.xline = NULL,
+    xline.linetype = "dashed",
+    xline.color = "black",
+    add.yline = NULL,
+    yline.linetype = "dashed",
+    yline.color = "black",
     do.letter = FALSE,
     do.ellipse = FALSE,
     do.label = FALSE,
@@ -330,7 +355,7 @@ scatterPlot <- function(
         x.adjustment, y.adjustment, color.adjustment,
         x.adj.fxn, y.adj.fxn, color.adj.fxn,
         rename.color.groups, rename.shape.groups,
-        multivar.split.dir, rows.use, do.hover, hover.data
+        multivar.split.dir, rows.use, do.hover, hover.data, hover.round.digits
     )
     Target_data <- edit_outs$data_use
     Others_data <- edit_outs$data_other
@@ -352,7 +377,9 @@ scatterPlot <- function(
         legend.show, legend.color.title, legend.color.size,
         legend.color.breaks, legend.color.breaks.labels, legend.shape.title,
         legend.shape.size, do.raster, raster.dpi,
-        cols_use$split.by, split.show.all.others, show.grid.lines)
+        cols_use$split.by, split.show.all.others, show.grid.lines,
+        add.xline, xline.linetype, xline.color,
+        add.yline, yline.linetype, yline.color)
 
     ### Add extra features
     if (!is.null(cols_use$split.by)) {
@@ -433,7 +460,13 @@ scatterPlot <- function(
     raster.dpi,
     split.by,
     split.show.all.others,
-    show.grid.lines
+    show.grid.lines,
+    add.xline,
+    xline.linetype,
+    xline.color,
+    add.yline,
+    yline.linetype,
+    yline.color
 ) {
 
     ### Set up plotting
@@ -445,18 +478,18 @@ scatterPlot <- function(
     }
 
     # Determine how to add data while adding proper theming
-    aes.args <- list(x = x.by, y = y.by)
+    aes.use <- aes(x = .data[[x.by]], y = .data[[y.by]])
     geom.args <- list(data = Target_data, alpha = opacity)
 
     if (is.character(size)) {
-        aes.args$size <- size
+        aes.use <- modifyList(aes.use, aes(size = .data[[size]]))
     } else {
         geom.args$size <- size
     }
 
     if (!is.null(color.by)) {
 
-        aes.args$color <- color.by
+        aes.use <- modifyList(aes.use, aes(color = .data[[color.by]]))
 
         if (is.numeric(Target_data[,color.by])) {
             p <- p +
@@ -476,7 +509,7 @@ scatterPlot <- function(
 
     if (!is.null(shape.by)) {
 
-        aes.args$shape <- shape.by
+        aes.use <- modifyList(aes.use, aes(shape = .data[[shape.by]]))
 
         p <- p +
             scale_shape_manual(
@@ -500,28 +533,36 @@ scatterPlot <- function(
             if (do.raster) {
                 .error_if_no_ggrastr()
                 p <- p + ggrastr::geom_point_rast(
-                    data = Others_data, aes_string(x = x.by, y = y.by),
+                    data = Others_data, aes(x = .data[[x.by]], y = .data[[y.by]]),
                     size=size, color = "gray90", raster.dpi = raster.dpi)
             } else {
                 p <- p + geom_point(
-                    data = Others_data, aes_string(x = x.by, y = y.by),
+                    data = Others_data, aes(x = .data[[x.by]], y = .data[[y.by]]),
                     size=size, color = "gray90")
             }
         }
     }
     # Target_data
     if (do.hover) {
-        aes.args$text <- "hover.string"
-        geom.args$mapping <- do.call(aes_string, aes.args)
+        aes.use <- modifyList(aes.use, aes(text = .data$hover.string))
+        geom.args$mapping <- aes.use
         p <- p + suppressWarnings(do.call(geom_point, geom.args))
     } else {
-        geom.args$mapping <- do.call(aes_string, aes.args)
+        geom.args$mapping <- aes.use
         if (do.raster) {
             .error_if_no_ggrastr()
             p <- p + do.call(ggrastr::geom_point_rast, geom.args)
         } else {
             p <- p + do.call(geom_point, geom.args)
         }
+    }
+
+    if (!is.null(add.xline)) {
+        p <- p + geom_vline(xintercept = add.xline, linetype = xline.linetype, color = xline.color)
+    }
+
+    if (!is.null(add.yline)) {
+        p <- p + geom_hline(yintercept = add.yline, linetype = yline.linetype, color = yline.color)
     }
 
     if (!legend.show) {
@@ -533,7 +574,7 @@ scatterPlot <- function(
 
 .rep_all_data_per_facet <- function(Target_data, Others_data, split.by) {
 
-    all_data <- rbind(Target_data, Others_data)
+    all_data <- rbind(Target_data[, colnames(Others_data)], Others_data)
 
     facet <- if (is.null(split.by)) {
         "filler"

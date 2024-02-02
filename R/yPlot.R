@@ -46,6 +46,11 @@
 #' For example, \code{function(x) \{log2(x)\}} or \code{as.factor}.
 #'
 #' In order to leave the unedited data available for use in other features, the adjusted data are put in a new column and that new column is used for plotting.
+#' @param hover.data String vector which denotes what data to show for each jitter data point, upon hover, when \code{do.hover} is set to \code{TRUE}.
+#' Defaults to all data expected to be useful.
+#' Only values present in the plotting data are actually used.
+#' These can be column names of \code{data_frame} and any column names which will be created to accommodate multivar and data adjustment functionality.
+#' You can run the function with \code{data.out = TRUE} and inspect the \code{$data} output's columns to view your available options.
 #' @param main String, sets the plot title. Default = "make" and if left as make, a title will be automatically generated.  To remove, set to \code{NULL}.
 #' @param theme A ggplot theme which will be applied before internal adjustments.
 #' Default = \code{theme_classic()}.
@@ -244,7 +249,11 @@ yPlot <- function(
     var.adjustment = NULL,
     var.adj.fxn = NULL,
     do.hover = FALSE,
-    hover.data = unique(c(var, paste0(var,".adj"), paste0(var,".multi"), paste0(var,".which"), group.by, shape.by, split.by)),
+    hover.data = unique(c(
+        var, paste0(var,".adj"), "var.multi", "var.which",
+        group.by, color.by, shape.by, split.by
+    )),
+    hover.round.digits = 5,
     color.panel = dittoColors(),
     colors = seq_along(color.panel),
     shape.panel = c(16,15,17,23,25,8),
@@ -319,8 +328,17 @@ yPlot <- function(
         group.by = group.by,
         color.by = color.by,
         shape.by = shape.by,
-        split.by = split.by
+        split.by = split.by,
+        group.aes = group.by
     )
+    if (group.by != color.by) {
+        cols_use$group.aes <- "group.aes"
+        data_frame$`group.aes` <- paste0(
+            as.character(data_frame[,group.by]),
+            ".-.",
+            as.character(data_frame[,color.by])
+        )
+    }
     # Relabel/reorder for groups
     data_frame[,group.by] <-
         .rename_and_or_reorder(data_frame[,group.by], x.reorder, x.labels)
@@ -354,12 +372,12 @@ yPlot <- function(
     if (do.hover) {
         hover_exists <- hover.data[hover.data %in% colnames(Target_data)]
         Target_data$hover.string <- .make_hover_strings_from_df(
-            Target_data[,hover_exists,drop=FALSE])
+            Target_data[,hover_exists,drop=FALSE], hover.round.digits)
         cols_use$hover.text <- "hover.string"
     }
 
     # Make the plot
-    p <- ggplot(Target_data, aes_string(fill=cols_use$color.by)) +
+    p <- ggplot(Target_data, aes(fill=.data[[cols_use$color.by]])) +
         theme +
         scale_fill_manual(name = legend.title, values=color.panel[colors]) +
         ggtitle(main, sub)
@@ -375,7 +393,8 @@ yPlot <- function(
             boxplot.position.dodge, boxplot.lineweight,
             vlnplot.lineweight, vlnplot.width, vlnplot.scaling,
             vlnplot.quantiles, add.line, line.linetype, line.color,
-            x.labels.rotate, do.hover, y.breaks, min, max, data_frame)
+            x.labels.rotate, do.hover, y.breaks, min, max, data_frame,
+            cols_use$group.aes)
     } else {
         p <- .yPlot_add_data_x_direction(
             p, Target_data, cols_use$var, cols_use$group.by,
@@ -421,13 +440,13 @@ yPlot <- function(
     vlnplot.lineweight, vlnplot.width, vlnplot.scaling, vlnplot.quantiles,
     add.line, line.linetype, line.color,
     x.labels.rotate, do.hover, y.breaks, min, max,
-    data_frame) {
+    data_frame, group.aes) {
     # This function takes in a partial yPlot ggplot data_frame without any data
     # overlay, and parses adding the main data visualizations.
     # Adds plots based on what is requested in plots, ordered by their order.
 
     # Now that we know the plot's direction, set direction & y-axis limits
-    p <- p + aes_string(x = group.by, y = var)
+    p <- p + aes(x = .data[[group.by]], y = .data[[var]])
 
     if (!is.null(y.breaks)) {
         p <- p + scale_y_continuous(breaks = y.breaks)
@@ -440,7 +459,7 @@ yPlot <- function(
     for (i in seq_along(plots)) {
         if (plots[i] == "vlnplot") {
             p <- p + geom_violin(
-                size = vlnplot.lineweight,
+                linewidth = vlnplot.lineweight,
                 width = vlnplot.width,
                 scale = vlnplot.scaling,
                 draw_quantiles = vlnplot.quantiles,
@@ -485,16 +504,16 @@ yPlot <- function(
                 jitter.args$raster.dpi <- raster.dpi
             }
 
-            jitter.aes.args <- list()
-            # if (do.hover) {
-            #     jitter.aes.args$text <-  "hover.string"
-            # }
+            jitter.aes <- aes(group = .data[[group.aes]])
+            if (do.hover) {
+                jitter.aes <- modifyList(jitter.aes, aes(text = .data$hover.string))
+            }
 
             # If shape.by given, use it. Else, shapes[1] which = dots (16) by default
             if (!is.null(shape.by)) {
 
                 # Set shape in aes & set scales/theming.
-                jitter.aes.args$shape <- shape.by
+                jitter.aes <- modifyList(jitter.aes, aes(shape = .data[[shape.by]]))
 
                 p <- p + scale_shape_manual(
                     values = shape.panel[seq_along(colLevels(shape.by, data_frame, rownames(Target_data)))])
@@ -512,7 +531,7 @@ yPlot <- function(
                 jitter.args$shape <- shape.panel[1]
             }
 
-            jitter.args$mapping <- do.call(aes_string, jitter.aes.args)
+            jitter.args$mapping <- jitter.aes
 
             if (do.hover) {
                 p <- p + suppressWarnings(do.call(geom_for_jitter, jitter.args))
@@ -546,7 +565,7 @@ yPlot <- function(
     #This function takes in a partial yPlot ggplot object without any data overlay, and parses adding the main data visualizations.
 
     # Now that we know the plot's direction, set direction & "y"-axis limits
-    p <- p + aes_string(x = var, y = group.by)
+    p <- p + aes(x = .data[[var]], y = .data[[group.by]])
 
     if (!is.null(y.breaks)) {
         p <- p + scale_x_continuous(breaks = y.breaks)
@@ -567,7 +586,7 @@ yPlot <- function(
         scale_y_discrete(expand = expansion(mult=c(0, ridgeplot.ymax.expansion)))
 
     # Add ridgeplot and jitter data
-    ridge.args <- list(size = ridgeplot.lineweight, scale = ridgeplot.scale)
+    ridge.args <- list(linewidth = ridgeplot.lineweight, scale = ridgeplot.scale)
     if (ridgeplot.shape == "hist") {
         ridge.args$stat <- "binline"
         ridge.args$bins <- ridgeplot.bins

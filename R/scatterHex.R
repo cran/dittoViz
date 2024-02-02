@@ -241,6 +241,12 @@ scatterHex <- function(
         add.trajectory.curves = NULL,
         trajectory.group.by,
         trajectory.arrow.size = 0.15,
+        add.xline = NULL,
+        xline.linetype = "dashed",
+        xline.color = "black",
+        add.yline = NULL,
+        yline.linetype = "dashed",
+        yline.color = "black",
         legend.show = TRUE,
         legend.color.title = "make",
         legend.color.breaks = waiver(),
@@ -319,7 +325,9 @@ scatterHex <- function(
         xlab, ylab, main, sub, theme, legend.show,
         legend.color.title, legend.color.breaks, legend.color.breaks.labels,
         legend.density.title, legend.density.breaks, legend.density.breaks.labels,
-        show.grid.lines)
+        show.grid.lines,
+        add.xline, xline.linetype, xline.color,
+        add.yline, yline.linetype, yline.color)
 
     ### Add extra features
     if (!is.null(cols_use$split.by)) {
@@ -387,7 +395,13 @@ scatterHex <- function(
         legend.density.title,
         legend.density.breaks,
         legend.density.breaks.labels,
-        show.grid.lines
+        show.grid.lines,
+        add.xline,
+        xline.linetype,
+        xline.color,
+        add.yline,
+        yline.linetype,
+        yline.color
 ) {
 
     if (!show.grid.lines) {
@@ -400,7 +414,7 @@ scatterHex <- function(
     p <- ggplot() + ylab(ylab) + xlab(xlab) + ggtitle(main,sub) + theme
 
     ### Determine how to add data while adding proper theming
-    aes.args <- list(x = x.by, y = y.by)
+    aes.use <- aes(x = .data[[x.by]], y = .data[[y.by]])
     geom.args <- list(
         data = data, bins = bins, na.rm = TRUE)
 
@@ -427,20 +441,21 @@ scatterHex <- function(
             labels = legend.density.breaks.labels)
 
         # Prep aesthetics
-        aes.args$z <- color.by
-        aes.args$fill <- "stat(c)"
-        aes.args$alpha <- "stat(d)"
-        # Fix for when color is a factor
-        aes.args$group <- 1
+        aes.use <- modifyList(aes.use, aes(
+            z = .data[[color.by]],
+            fill = after_stat(.data$fxn_c),
+            alpha = after_stat(.data$fxn_d),
+            # Fix for when color is a factor
+            group = 1))
 
         # Determine how 'c' and 'd' should be calculated &
         # set fill based on color.method
         if (discrete) {
 
             geom.args$funs <- c(
-                c = if (color.method == "max") {
+                fxn_c = if (color.method == "max") {
                     function(x) names(which.max(table(x)))
-                }, d = length)
+                }, fxn_d = length)
 
             p <- p + scale_fill_manual(
                 name = legend.color.title,
@@ -449,11 +464,11 @@ scatterHex <- function(
         } else {
 
             geom.args$funs <- c(
-                c = if (color.method == "max.prop") {
+                fxn_c = if (color.method == "max.prop") {
                     function(x) max(table(x)/length(x))
                 } else {
                     color.method
-                }, d = length)
+                }, fxn_d = length)
 
             p <- p + scale_fill_gradient(
                 name = legend.color.title,
@@ -467,11 +482,19 @@ scatterHex <- function(
     }
 
     ### Add data
-    geom.args$mapping <- do.call(aes_string, aes.args)
+    geom.args$mapping <- aes.use
     if (!is.null(color.by)) {
         p <- p + do.call(ggplot.multistats::stat_summaries_hex, geom.args)
     } else {
         p <- p + do.call(stat_bin_hex, geom.args)
+    }
+
+    if (!is.null(add.xline)) {
+        p <- p + geom_vline(xintercept = add.xline, linetype = xline.linetype, color = xline.color)
+    }
+
+    if (!is.null(add.yline)) {
+        p <- p + geom_hline(yintercept = add.yline, linetype = yline.linetype, color = yline.color)
     }
 
     if (!legend.show) {
