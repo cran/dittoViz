@@ -1,3 +1,13 @@
+# dittoViz 1.0.3
+
+* Expanded flexibility when adding lines to plots: Adds ability to place sloped lines with scatterPlot() and scatterHex() via new 'add.abline' and 'abline.*' inputs, as well as previously unavailable opacity and lineweight control inputs for all existing 'add.line' variants.
+
+# dittoViz 1.0.2
+
+* For scatterPlot() and scatterHex(), added the ability to use numbers as data labels instead of the data-values themselves, because sometimes data-values are quite long. Controlled with new inputs 'labels.use.numbers' and 'labels.numbers.spacer'.
+* Added new 'color.method = "prop.<value>"' functionality to scatterHex() which allows coloring bins by the proportion of a given 'color.by'-data value.
+* BugFix: Let 'show.grid.lines = FALSE' turn off grid lines (by adjusting 'theme' before, instead of after, adding 'theme' to the growing plot).
+
 # dittoViz 1.0.1
 
 * Multiple improvements to 'do.hover' ggplotly() conversion functionality: 

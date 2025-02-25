@@ -11,9 +11,10 @@
 #' Can be any function that inputs (summarizes) a numeric vector and outputs a single numeric value.
 #' Default is \code{median}.
 #' Other useful options are \code{sum}, \code{mean}, \code{sd}, or \code{max}.
-#' You can also use a custom function as long as you give it a name; e.g. first run \code{logsum <- function(x) \{ log(sum(x)) \}} externally, then give \code{color.method = "logsum"}
+#' You can also use a custom function as long as you give it a name; e.g. first run \code{logsum <- function(x) \{ log(sum(x)) \}} externally, then give \code{color.method = "logsum"}.
 #'
 #' \strong{Discrete}: A string signifying whether the color should (default) be simply based on the "max" grouping of the bin,
+#' based on "prop.<value>" the proportion of a specific value (e.g. "prop.A" or "prop.TRUE"),
 #' or based on the "max.prop"ortion of observations belonging to any grouping.
 #' @param legend.density.title,legend.color.title Strings which set the title for the legends.
 #' @param legend.density.breaks,legend.color.breaks Numeric vector which sets the discrete values to label in the density and color.by legends.
@@ -72,7 +73,7 @@
 #' \code{\link{scatterPlot}} for making non-hex-binned scatter plots showing each individual data point.
 #' It is often best to investigate your data with both the individual and hex-bin methods, then pick whichever is the best representation for your particular goal.
 #'
-#' @author Daniel Bunis with some code adapted from Giuseppe D'Agostino
+#' @author Daniel Bunis, Jared Andrews with some code adapted from Giuseppe D'Agostino
 #' @examples
 #' example("dittoExampleData", echo = FALSE)
 #'
@@ -94,6 +95,26 @@
 #'     scatterHex(
 #'         example_df, x.by = "PC1", y.by = "PC2",
 #'         color.by = "gene1")
+#' }
+#'
+#' # 'color.method' is then used to adjust how the target data is summarized
+#' if (requireNamespace("ggplot.multistats", quietly = TRUE)) {
+#'     scatterHex(example_df, x.by = "PC1", y.by = "PC2",
+#'         color.by = "groups",
+#'         color.method = "max.prop")
+#' }
+#' if (requireNamespace("ggplot.multistats", quietly = TRUE)) {
+#'     scatterHex(example_df, x.by = "PC1", y.by = "PC2",
+#'         color.by = "gene1",
+#'         color.method = "mean")
+#' }
+#' # One particularly useful 'color.method' for discrete 'color.by'-data is
+#' #   to use 'prop.<value>' to color by the proportion of a particular value
+#' #   within each bin:
+#' if (requireNamespace("ggplot.multistats", quietly = TRUE)) {
+#'     scatterHex(example_df, x.by = "PC1", y.by = "PC2",
+#'         color.by = "groups",
+#'         color.method = "prop.A")
 #' }
 #'
 #' # Data can be "split" or faceted by a discrete variable as well.
@@ -157,6 +178,7 @@
 #'         do.label = TRUE,          # Turns on the labeling feature
 #'         labels.size = 8,          # Adjust the text size of labels
 #'         labels.highlight = FALSE, # Removes white background behind labels
+#'         # labels.use.numbers = TRUE,# Swap to number placeholders
 #'         labels.repel = FALSE)     # Turns off anti-overlap location adjustments
 #' }
 #'
@@ -234,6 +256,8 @@ scatterHex <- function(
         do.label = FALSE,
         labels.size = 5,
         labels.highlight = TRUE,
+        labels.use.numbers = FALSE,
+        labels.numbers.spacer = ": ",
         labels.repel = TRUE,
         labels.split.by = split.by,
         labels.repel.adjust = list(),
@@ -244,9 +268,19 @@ scatterHex <- function(
         add.xline = NULL,
         xline.linetype = "dashed",
         xline.color = "black",
+        xline.linewidth = 0.5,
+        xline.opacity = 1,
         add.yline = NULL,
         yline.linetype = "dashed",
         yline.color = "black",
+        yline.linewidth = 0.5,
+        yline.opacity = 1,
+        add.abline = NULL,
+        abline.slope = 1,
+        abline.linetype = "solid",
+        abline.color = "black",
+        abline.linewidth = 0.5,
+        abline.opacity = 1,
         legend.show = TRUE,
         legend.color.title = "make",
         legend.color.breaks = waiver(),
@@ -283,7 +317,7 @@ scatterHex <- function(
         if (!is.numeric(data[,cols_use$color.by])) {
             discrete_data <- TRUE
 
-            if (!("max.prop" %in% color.method)) {
+            if (!any(c("max.prop", paste0("prop.", unique(data[,cols_use$color.by]))) %in% color.method)) {
                 discrete_disp <- TRUE
             }
         }
@@ -325,14 +359,28 @@ scatterHex <- function(
         xlab, ylab, main, sub, theme, legend.show,
         legend.color.title, legend.color.breaks, legend.color.breaks.labels,
         legend.density.title, legend.density.breaks, legend.density.breaks.labels,
-        show.grid.lines,
-        add.xline, xline.linetype, xline.color,
-        add.yline, yline.linetype, yline.color)
+        show.grid.lines)
 
     ### Add extra features
     if (!is.null(cols_use$split.by)) {
         p <- .add_splitting(
             p, cols_use$split.by, split.nrow, split.ncol, split.adjust)
+    }
+
+    # Get number of panels so that replicates of aesthetics can be generated if supplied for each line.
+    pp <- ggplot_build(p)
+    num.panels <- length(levels(pp$data[[1]]$PANEL))
+
+    if (!is.null(add.xline)) {
+        p <- .add_xline(p, add.xline, xline.linetype, xline.color, xline.linewidth, xline.opacity, num.panels)
+    }
+
+    if (!is.null(add.yline)) {
+        p <- .add_yline(p, add.yline, yline.linetype, yline.color, yline.linewidth, yline.opacity, num.panels)
+    }
+
+    if (!is.null(add.abline)) {
+        p <- .add_abline(p, add.abline, abline.slope, abline.linetype, abline.color, abline.linewidth, abline.opacity, num.panels)
     }
 
     if (do.contour) {
@@ -343,7 +391,8 @@ scatterHex <- function(
         p, data, cols_use$x.by, cols_use$y.by, cols_use$color.by,
         FALSE, do.ellipse, do.label,
         labels.highlight, labels.size, labels.repel, labels.split.by,
-        labels.repel.adjust)
+        labels.repel.adjust,
+        labels.use.numbers, labels.numbers.spacer, legend.color.title)
 
     if (is.list(add.trajectory.by.groups)) {
         p <- .add_trajectories_by_groups(
@@ -395,13 +444,7 @@ scatterHex <- function(
         legend.density.title,
         legend.density.breaks,
         legend.density.breaks.labels,
-        show.grid.lines,
-        add.xline,
-        xline.linetype,
-        xline.color,
-        add.yline,
-        yline.linetype,
-        yline.color
+        show.grid.lines
 ) {
 
     if (!show.grid.lines) {
@@ -466,6 +509,11 @@ scatterHex <- function(
             geom.args$funs <- c(
                 fxn_c = if (color.method == "max.prop") {
                     function(x) max(table(x)/length(x))
+                } else if (grepl("^prop.", color.method)) {
+                    function(x) {
+                        lev <- substr(color.method, 6, nchar(color.method))
+                        sum(x==lev)/length(x)
+                    }
                 } else {
                     color.method
                 }, fxn_d = length)
@@ -489,14 +537,6 @@ scatterHex <- function(
         p <- p + do.call(stat_bin_hex, geom.args)
     }
 
-    if (!is.null(add.xline)) {
-        p <- p + geom_vline(xintercept = add.xline, linetype = xline.linetype, color = xline.color)
-    }
-
-    if (!is.null(add.yline)) {
-        p <- p + geom_hline(yintercept = add.yline, linetype = yline.linetype, color = yline.color)
-    }
-
     if (!legend.show) {
         p <- .remove_legend(p)
     }
@@ -505,15 +545,16 @@ scatterHex <- function(
 }
 
 .check_color.method <- function(color.method, discrete) {
-
     valid <- FALSE
     if (discrete) {
         valid <- color.method == "max"
     } else {
-        valid <- color.method == "max.prop" || exists(color.method, mode='function')
+        # Discrete at this point is based on the style of data displayed
+        # Thus originally discrete data with color.method = 'max.prop' gets 'discrete = FALSE' to this function
+        valid <- color.method == "max.prop" || grepl("^prop.", color.method) || exists(color.method, mode='function')
     }
 
     if (!valid) {
-        stop("'color.method' not valid. Must be \"max\" or \"max.prop\" (discrete data) or the name of a function (continuous data)")
+        stop("'color.method' not valid. Must be \"max\", \"max.prop\", or \"prop.<data-level>\" (discrete data) or the name of a function (continuous data)")
     }
 }

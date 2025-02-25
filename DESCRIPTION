@@ -1,7 +1,7 @@
 Package: dittoViz
 Type: Package
 Title: User Friendly Data Visualization
-Version: 1.0.1
+Version: 1.0.3
 Authors@R: c(person("Daniel", "Bunis", email = "daniel.bunis@ucsf.edu",
     role=c("aut", "cre"), comment = c(ORCID = "0000-0002-0010-1616")))
 Description: A comprehensive visualization toolkit built with coders of all
@@ -25,8 +25,8 @@ Config/testthat/edition: 3
 URL: https://github.com/dtm2451/dittoViz
 BugReports: https://github.com/dtm2451/dittoViz/issues
 NeedsCompilation: no
-Packaged: 2024-02-01 23:16:05 UTC; dan
+Packaged: 2025-02-25 18:18:52 UTC; dan
 Author: Daniel Bunis [aut, cre] (<https://orcid.org/0000-0002-0010-1616>)
 Maintainer: Daniel Bunis <daniel.bunis@ucsf.edu>
 Repository: CRAN
-Date/Publication: 2024-02-02 00:00:12 UTC
+Date/Publication: 2025-02-25 18:30:02 UTC

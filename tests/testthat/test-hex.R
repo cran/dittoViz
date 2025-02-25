@@ -24,6 +24,11 @@ test_that("scatterHex - bins adjusts number of bins", {
 test_that("scatterHex - color.method options work for discrete data, and defaults to 'max'", {
     ### Manual: Should have continuous color-scale and max.props in its title
     expect_s3_class(scatterHex(data_frame=df, x.by=cont1, y.by=cont2, disc,
+                                color.method = "prop.Adelie"),
+                    "ggplot")
+
+    ### Manual: Should have continuous color-scale and max.props in its title
+    expect_s3_class(scatterHex(data_frame=df, x.by=cont1, y.by=cont2, disc,
                                 color.method = "max.prop"),
                     "ggplot")
 
@@ -36,6 +41,9 @@ test_that("scatterHex - color.method options work for discrete data, and default
 
     expect_error(scatterHex(data_frame=df, x.by=cont1, y.by=cont2, disc,
                              color.method = "abcde"),
+                 "'color.method' not valid", fixed = TRUE)
+    expect_error(scatterHex(data_frame=df, x.by=cont1, y.by=cont2, disc,
+                            color.method = "prop.ABC"),
                  "'color.method' not valid", fixed = TRUE)
 })
 
@@ -339,6 +347,28 @@ test_that("scatterHex ignores do.label/do.ellipse for continuous data", {
                    NA)
 })
 
+test_that("scatterHex labeling with numbers", {
+    ### Manual Check
+    # Number labels with matching legend
+    expect_s3_class(
+        scatterHex(
+            disc, data_frame=df, x.by=cont1, y.by=cont2, do.label = TRUE,
+            labels.use.numbers = TRUE),
+        "ggplot")
+    # _ instead of :
+    expect_s3_class(
+        scatterHex(
+            disc, data_frame=df, x.by=cont1, y.by=cont2, do.label = TRUE,
+            labels.use.numbers = TRUE,
+            labels.numbers.spacer = "_"),
+        "ggplot")
+    # Colors should match with this original
+    expect_s3_class(
+        scatterHex(
+            disc, data_frame=df, x.by=cont1, y.by=cont2, do.label = TRUE),
+        "ggplot")
+})
+
 # adjustments
 test_that("scatterPlot data adjustments applied", {
     expect_s3_class(
@@ -364,7 +394,7 @@ test_that("scatterPlot data adjustments applied", {
         max(p$data[[p$cols_used$y.by]]), 1)
 })
 
-test_that("scatterPlot added arbitrary horizontal and vertical lines work", {
+test_that("scatterHex added arbitrary horizontal, vertical, and diagonal lines work", {
     expect_s3_class(
         scatterHex(df, "PC1", "PC2", disc,
                     add.yline = c(-1, 1), add.xline = c(2)),
@@ -376,6 +406,17 @@ test_that("scatterPlot added arbitrary horizontal and vertical lines work", {
         scatterHex(df, "PC1", "PC2", disc,
                     add.yline = c(-1, 1), add.xline = c(2),
                     yline.color = "red", xline.linetype = "dotted"),
+        "ggplot")
+
+    ### Manual Check:
+    # split.by works with lines and ablines work
+    expect_s3_class(
+        scatterHex(df, "PC3", "PC2", disc, split.by = "groups",
+            add.yline = c(-5, 5), add.xline = c(2),
+            yline.color = "red", xline.linetype = "dotted",
+            add.abline = c(5, 1.5), abline.slope = c(2, -3), 
+            abline.linetype = "solid", abline.opacity = c(1, 0.5), abline.linewidth = c(1, 2), 
+            abline.color = c("green", "blue")),
         "ggplot")
 })
 
